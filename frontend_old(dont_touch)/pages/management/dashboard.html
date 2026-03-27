@@ -1,0 +1,450 @@
+{% extends "index.html" %}
+
+{% block title %}Dashboard — Pustak Tracker{% endblock %}
+{% block page_title %}<i class="bi bi-speedometer2"></i>Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- ══ Page Header ══ -->
+<div class="page-header fade-in">
+    <div class="page-header-left">
+        <h1>Dashboard</h1>
+        <p class="page-header-subtitle">Library operations overview</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-success" type="button" onclick="startIssueProcess();" style="animation: slideUpFlex 0.6s ease-out both;">
+            <i class="bi bi-plus-lg"></i><span>Issue Book</span>
+        </button>
+        <button class="btn btn-secondary" type="button" onclick="startReturnProcess();" style="animation: slideUpFlex 0.6s ease-out both; animation-delay: 0.1s;">
+            <i class="bi bi-arrow-return-left"></i><span>Return Book</span>
+        </button>
+    </div>
+</div>
+
+<!-- ══ KPI Statistics (Bento-style Grid) ══ -->
+<div class="stat-grid fade-in">
+
+    <div class="card stat-card stat-primary h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div style="flex: 1;">
+                    <div class="stat-label">Books Checked Out</div>
+                    <div class="stat-value" id="kpi-checked-out">{{ stats.total_issued if stats else 0 }}</div>
+                </div>
+                <div class="stat-icon teal"><i class="bi bi-book"></i></div>
+            </div>
+            <span class="badge bg-info" style="animation: pulse 2s ease-in-out infinite;">Currently Issued</span>
+        </div>
+    </div>
+
+    <div class="card stat-card stat-danger h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div style="flex: 1;">
+                    <div class="stat-label">Overdue Books</div>
+                    <div class="stat-value" id="kpi-overdue" style="color: var(--danger-light);">{{ stats.overdue_count if stats else 0 }}</div>
+                </div>
+                <div class="stat-icon red"><i class="bi bi-exclamation-triangle"></i></div>
+            </div>
+            <span class="badge bg-danger">Fines: ₹{{ stats.total_fines if stats else 0 }}</span>
+        </div>
+    </div>
+
+    <div class="card stat-card stat-info h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div style="flex: 1;">
+                    <div class="stat-label">Book Inventory</div>
+                    <div class="stat-value" id="kpi-inventory">{{ stats.total_copies if stats else 0 }}</div>
+                </div>
+                <div class="stat-icon blue"><i class="bi bi-stack"></i></div>
+            </div>
+            <span class="stat-sub" style="display: block; margin-top: var(--space-3);">{{ stats.availability_percentage if stats else 0 }}% available</span>
+        </div>
+    </div>
+
+    <div class="card stat-card stat-success h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div style="flex: 1;">
+                    <div class="stat-label">Active Patrons</div>
+                    <div class="stat-value" id="kpi-patrons">{{ stats.total_users if stats else 0 }}</div>
+                </div>
+                <div class="stat-icon green"><i class="bi bi-people"></i></div>
+            </div>
+            <span class="stat-sub" style="display: block; margin-top: var(--space-3);">+{{ stats.new_users_this_week if stats else 0 }} this week</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══ Charts + Due Soon (Bento Layout) ══ -->
+<div class="row g-4 mb-4 fade-in">
+
+    <!-- Circulation Chart -->
+    <div class="col-lg-7">
+        <div class="card h-100" style="animation: slideUpFlex 0.7s ease-out both; animation-delay: 0.1s;">
+            <div class="card-header" style="position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5;"></div>
+                <h6 style="margin-bottom: 0;"><i class="bi bi-graph-up" style="color: var(--accent); margin-right: 8px;"></i>Monthly Circulation Trend
+                    <span style="color:var(--text-muted); font-weight:400; font-size:0.75rem; margin-left:4px;">(Last 10 Months)</span>
+                </h6>
+            </div>
+            <div class="card-body" style="height:280px; padding: 16px; position: relative;">
+                <canvas id="circulationChart" style="height:100% !important; max-height:248px;"></canvas>
+                <div style="position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--accent-light)); border-radius: 50%; opacity: 0.1;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: Due Soon + Category chart -->
+    <div class="col-lg-5 d-flex flex-column gap-4">
+
+        <!-- Due Soon -->
+        <div class="card" style="animation: slideUpFlex 0.7s ease-out both; animation-delay: 0.2s;">
+            <div class="card-header" style="position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, var(--danger-light), transparent); opacity: 0.5;"></div>
+                <h6 style="color:var(--danger-light); margin-bottom: 0;">
+                    <i class="bi bi-clock-history" style="color:var(--danger-light); animation: pulse 2s ease-in-out infinite;"></i>Due Soon
+                    <span style="color:var(--text-muted); font-weight:400; font-size:0.75rem; margin-left:4px;">(High Priority)</span>
+                </h6>
+            </div>
+            <div class="card-body p-0" style="max-height:220px; overflow-y:auto;">
+                <ul class="list-group list-group-flush" id="due-today-list">
+                    {% if due_soon_books %}
+                        {% for transaction in due_soon_books[:4] %}
+                        <li class="list-group-item" style="transition: all var(--transition-fast); border-left: 3px solid transparent; animation: slideUpFlex 0.5s ease-out both;" style="animation-delay: {{ loop.index * 0.1 }}s;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div style="min-width:0; flex:1;">
+                                    <div class="fw-medium" style="font-size:0.8125rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                        {% if transaction.book.title|length > 30 %}{{ transaction.book.title[:30] }}…{% else %}{{ transaction.book.title }}{% endif %}
+                                    </div>
+                                    <div style="font-size:0.75rem; color:var(--text-muted);">{{ transaction.user.name }}</div>
+                                </div>
+                                <span class="badge ms-2 {% if transaction.status == 'overdue' %}bg-danger{% else %}bg-warning{% endif %}" style="flex-shrink:0; animation: pulse 2s ease-in-out infinite;">
+                                    {% set days_diff = (transaction.due_date.date() - now.date()).days %}
+                                    {% if days_diff < 0 %} {{ -days_diff }}d overdue
+                                    {% elif days_diff == 0 %} Due Today
+                                    {% elif days_diff == 1 %} Tomorrow
+                                    {% else %} {{ days_diff }}d left {% endif %}
+                                </span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    {% else %}
+                        <li class="list-group-item text-center" style="padding:1.5rem; animation: blurIn 0.6s ease-out;">
+                            <i class="bi bi-check-circle" style="color:var(--success-light); font-size:1.25rem; display:block; margin-bottom:0.5rem; animation: zoomIn 0.5s ease-out;"></i>
+                            <span style="color:var(--text-muted); font-size:0.8125rem;">No books due soon</span>
+                        </li>
+                    {% endif %}
+                    <li class="list-group-item text-center" style="padding:0.75rem; background: rgba(0, 201, 160, 0.05); transition: all var(--transition-fast);">
+                        <a href="{{ url_for('web.overdue') }}" style="font-size:0.8rem; font-weight:700; color:var(--accent); text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>View All Due & Overdue</span>
+                            <i class="bi bi-arrow-right" style="transition: transform var(--transition-fast);"></i>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Category Chart -->
+        <div class="card" style="animation: slideUpFlex 0.7s ease-out both; animation-delay: 0.3s;">
+            <div class="card-header" style="position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, var(--info-light), transparent); opacity: 0.5;"></div>
+                <h6 style="margin-bottom: 0;"><i class="bi bi-bar-chart" style="color: var(--info-light); margin-right: 8px;"></i>Top 5 Categories</h6>
+            </div>
+            <div class="card-body" style="height:200px; padding: 16px; position: relative;">
+                <canvas id="categoryChart" style="height:100% !important; max-height:168px;"></canvas>
+                <div style="position: absolute; bottom: 16px; right: 16px; width: 24px; height: 24px; background: linear-gradient(135deg, var(--info-light), var(--info)); border-radius: 50%; opacity: 0.1;"></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+
+<!-- ══ Recent Transactions ══ -->
+{% if recent_transactions %}
+<div class="fade-in">
+    <div class="card" style="animation: slideUpFlex 0.8s ease-out both; animation-delay: 0.4s;">
+        <div class="card-header" style="position: relative; overflow: hidden;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, var(--success-light), transparent); opacity: 0.5;"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h6 style="margin-bottom: 0;"><i class="bi bi-clock-history" style="color: var(--success-light); margin-right: 8px;"></i>Recent Transactions</h6>
+                <a href="{{ url_for('web.transactions') }}" class="btn btn-sm btn-outline-secondary" style="transition: all var(--transition-fast);">View All →</a>
+            </div>
+        </div>
+        <div class="card-body p-0" style="overflow: hidden;">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" style="animation: fadeUp 0.8s ease-out;">
+                    <thead style="background: rgba(0, 201, 160, 0.05);">
+                        <tr>
+                            <th>Book</th>
+                            <th>Patron</th>
+                            <th>Type</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in recent_transactions[:5] %}
+                        <tr style="animation: slideUpFlex 0.6s ease-out both; animation-delay: {{ loop.index * 0.08 }}s; transition: all var(--transition-fast); border-left: 3px solid transparent;">
+                            <td>
+                                <span class="fw-medium" style="font-size:0.8125rem;">
+                                    {{ transaction.book.title[:40] }}{% if transaction.book.title|length > 40 %}…{% endif %}
+                                </span>
+                            </td>
+                            <td style="font-size:0.8125rem; color:var(--text-secondary);">{{ transaction.user.name }}</td>
+                            <td>
+                                <span class="badge {% if transaction.return_date %}bg-success{% else %}bg-info{% endif %}" style="animation: pulse 2s ease-in-out infinite; animation-delay: {{ loop.index * 0.1 }}s;">
+                                    {{ 'Return' if transaction.return_date else 'Issue' }}
+                                </span>
+                            </td>
+                            <td style="font-size:0.75rem; color:var(--text-muted);">{{ transaction.created_at.strftime('%d %b %Y') }}</td>
+                            <td>
+                                <span class="badge
+                                    {% if transaction.status == 'returned' %}bg-success
+                                    {% elif transaction.status == 'issued' %}bg-warning
+                                    {% else %}bg-danger{% endif %}">
+                                    {{ transaction.status.title() }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══ Issue Book Modal ══ -->
+<div class="modal fade" id="issueBookModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-book-fill me-2" style="color:var(--success-light);"></i>Issue Book</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="issue-step-1">
+                    <p style="font-size:0.8125rem; color:var(--text-muted); margin-bottom:1rem;">Step 1: Scan the book's barcode using your phone.</p>
+                    <div class="alert alert-info">
+                        <i class="bi bi-phone"></i>
+                        <strong>Open scanner on your phone:</strong><br>
+                        <a href="#" id="issue-scanner-link" target="_blank" class="btn btn-primary btn-sm mt-2">
+                            <i class="bi bi-qr-code-scan me-1"></i>Open Mobile Scanner
+                        </a>
+                    </div>
+                    <div class="text-center" style="padding:1.5rem 0;">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Waiting for scan...</span>
+                        </div>
+                        <p style="margin-top:0.75rem; color:var(--text-muted); font-size:0.8125rem;">Waiting for barcode scan…</p>
+                    </div>
+                </div>
+                <div id="issue-step-2" style="display:none;">
+                    <p style="font-size:0.75rem; font-weight:600; color:var(--text-secondary); margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.06em;">Step 2: Book Confirmed</p>
+                    <div id="issue-book-info" class="alert alert-success"></div>
+                    <p style="font-size:0.75rem; font-weight:600; color:var(--text-secondary); margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.06em; margin-top:1.25rem;">Step 3: Select Patron</p>
+                    <select id="issue-user-select" class="form-select">
+                        <option value="">Select a patron…</option>
+                    </select>
+                    <div class="mt-4 d-flex gap-2">
+                        <button class="btn btn-success" onclick="completeIssue()" disabled id="issue-complete-btn">
+                            <i class="bi bi-check-circle me-1"></i>Complete Issue
+                        </button>
+                        <button class="btn btn-secondary" onclick="resetIssueProcess()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Scan Another
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Return Book Modal ══ -->
+<div class="modal fade" id="returnBookModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-return-left me-2" style="color:var(--accent);"></i>Return Book</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="return-step-1">
+                    <p style="font-size:0.8125rem; color:var(--text-muted); margin-bottom:1rem;">Scan the book's barcode to look up the transaction.</p>
+                    <div class="alert alert-info">
+                        <i class="bi bi-phone"></i>
+                        <strong>Open scanner on your phone:</strong><br>
+                        <a href="#" id="return-scanner-link" target="_blank" class="btn btn-primary btn-sm mt-2">
+                            <i class="bi bi-qr-code-scan me-1"></i>Open Mobile Scanner
+                        </a>
+                    </div>
+                    <div class="text-center" style="padding:1.5rem 0;">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Waiting for scan...</span>
+                        </div>
+                        <p style="margin-top:0.75rem; color:var(--text-muted); font-size:0.8125rem;">Waiting for barcode scan…</p>
+                    </div>
+                </div>
+                <div id="return-step-2" style="display:none;">
+                    <p style="font-size:0.75rem; font-weight:600; color:var(--text-secondary); margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.06em;">Book Found</p>
+                    <div id="return-book-info" class="alert alert-success"></div>
+                    <div class="d-flex gap-2 mt-4">
+                        <button class="btn btn-primary btn-lg" onclick="completeReturn()" id="return-complete-btn">
+                            <i class="bi bi-arrow-return-left me-2"></i>Return This Book
+                        </button>
+                        <button class="btn btn-secondary" onclick="resetReturnProcess()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Scan Another
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard_clean.js') }}"></script>
+<script type="application/json" id="chart-data">
+    {
+        "circulation": {
+            "labels":   {{ stats.circulation_data | map(attribute='month')    | list | tojson if stats else '[]' }},
+            "issued":   {{ stats.circulation_data | map(attribute='issued')   | list | tojson if stats else '[]' }},
+            "returned": {{ stats.circulation_data | map(attribute='returned') | list | tojson if stats else '[]' }}
+        },
+        "categories": {
+            "names":  {{ stats.category_stats | map(attribute='name')  | list | tojson if stats else '[]' }},
+            "counts": {{ stats.category_stats | map(attribute='count') | list | tojson if stats else '[]' }}
+        }
+    }
+</script>
+<script>
+    const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+
+    const teal    = '#00C9A0';
+    const green   = '#2EA043';
+    const red     = '#CF222E';
+    const blue    = '#388BFD';
+    const amber   = '#D29922';
+
+    // 1. Circulation Trend (Line)
+    const ctxC = document.getElementById('circulationChart');
+    if (ctxC) {
+        new Chart(ctxC, {
+            type: 'line',
+            data: {
+                labels: chartData.circulation.labels,
+                datasets: [{
+                    label: 'Books Issued',
+                    data: chartData.circulation.issued,
+                    borderColor: teal,
+                    backgroundColor: 'rgba(0,201,160,0.08)',
+                    borderWidth: 2,
+                    pointBackgroundColor: teal,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Books Returned',
+                    data: chartData.circulation.returned,
+                    borderColor: green,
+                    backgroundColor: 'rgba(46,160,67,0.06)',
+                    borderWidth: 2,
+                    pointBackgroundColor: green,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { 
+                        position: 'top', 
+                        labels: { 
+                            color: '#8B949E', 
+                            padding: 16,
+                            font: { size: 12, weight: '600' },
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            borderRadius: 2,
+                            generateLabels: function(chart) {
+                                const datasets = chart.data.datasets;
+                                return datasets.map((dataset, i) => ({
+                                    text: dataset.label,
+                                    fillStyle: dataset.borderColor,
+                                    hidden: !chart.isDatasetVisible(i),
+                                    index: i,
+                                    strokeStyle: dataset.borderColor,
+                                    lineWidth: 2
+                                }));
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1C2333',
+                        borderColor: '#30363D',
+                        borderWidth: 1,
+                        titleColor: '#E6EDF3',
+                        bodyColor: '#8B949E',
+                        padding: 12
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(48,54,61,0.8)' }, ticks: { color: '#484F58' }, border: { display: false } },
+                    x: { grid: { display: false }, ticks: { color: '#484F58' }, border: { display: false } }
+                }
+            }
+        });
+    }
+
+    // 2. Category Chart (Horizontal Bar)
+    const ctxCat = document.getElementById('categoryChart');
+    if (ctxCat) {
+        new Chart(ctxCat, {
+            type: 'bar',
+            data: {
+                labels: chartData.categories.names,
+                datasets: [{
+                    label: 'Borrow Count',
+                    data: chartData.categories.counts,
+                    backgroundColor: [teal, green, blue, amber, red],
+                    borderWidth: 0,
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1C2333',
+                        borderColor: '#30363D',
+                        borderWidth: 1,
+                        titleColor: '#E6EDF3',
+                        bodyColor: '#8B949E',
+                        padding: 10
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true, grid: { color: 'rgba(48,54,61,0.8)' }, ticks: { color: '#484F58' }, border: { display: false } },
+                    y: { grid: { display: false }, ticks: { color: '#8B949E', font: { size: 11 } }, border: { display: false } }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

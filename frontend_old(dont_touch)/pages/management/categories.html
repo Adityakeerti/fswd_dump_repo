@@ -1,0 +1,203 @@
+{% extends "index.html" %}
+
+{% block title %}Categories — Pustak Tracker{% endblock %}
+{% block page_title %}<i class="bi bi-tags"></i>Categories{% endblock %}
+
+{% block content %}
+
+<div class="page-header fade-in">
+    <div class="page-header-left">
+        <h1>Categories</h1>
+        <p class="page-header-subtitle">{{ categories|length }} book categories</p>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+            <i class="bi bi-plus-lg"></i><span>Add Category</span>
+        </button>
+    </div>
+</div>
+
+<div class="card fade-in">
+    <div class="card-header"><h6><i class="bi bi-table"></i>All Categories</h6></div>
+    <div class="card-body p-0">
+        {% if categories %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="categories-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th style="text-align:center;">Books</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category in categories %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div style="width:28px;height:28px;background:var(--accent-dim);border:1px solid rgba(0,201,160,0.2);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                    <i class="bi bi-tag-fill" style="color:var(--accent);font-size:0.75rem;"></i>
+                                </div>
+                                <span class="fw-medium" style="font-size:0.875rem;">{{ category.name }}</span>
+                            </div>
+                        </td>
+                        <td style="font-size:0.8125rem;color:var(--text-secondary);">{{ category.description or '—' }}</td>
+                        <td style="text-align:center;"><span class="badge bg-primary">{{ category.books|length }}</span></td>
+                        <td style="font-size:0.75rem;color:var(--text-muted);">{{ category.created_at.strftime('%d %b %Y') }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    onclick="deleteCategory({{ category.id }}, {{ category.name|tojson }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-tags"></i>
+            <h4>No categories yet</h4>
+            <p>Create categories to organise your library's books.</p>
+            <button class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                <i class="bi bi-plus-lg"></i><span>Add First Category</span>
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-lg" style="color:var(--accent);"></i>Add New Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('web.add_category') }}">
+                <div class="modal-body">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control", placeholder="e.g. Science Fiction") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows="3", placeholder="Optional description…") }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    {{ form.submit(class="btn btn-primary") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Category Modal -->
+<div class="modal fade" id="deleteCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-trash me-2" style="color:var(--danger-light);"></i>Delete Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-secondary);font-size:0.875rem;">
+                    Delete <strong id="deleteCategoryName" style="color:var(--text-primary);"></strong>?
+                </p>
+                <div class="alert alert-danger" style="font-size:0.8rem;margin-bottom:0;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>This affects all books in this category.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteCategoryForm" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function deleteCategory(id, name) {
+    document.getElementById('deleteCategoryName').textContent = name;
+    document.getElementById('deleteCategoryForm').action = '/categories/' + id + '/delete';
+    new bootstrap.Modal(document.getElementById('deleteCategoryModal')).show();
+}
+
+    // Enforce strict 1:1 header/body cell alignment to prevent column shifting.
+    document.addEventListener('DOMContentLoaded', function () {
+        function getTds(tr) {
+            return Array.from(tr.children).filter(el => el.tagName && el.tagName.toLowerCase() === 'td');
+        }
+
+        function normalizeTableCells(table, expectedCount, actionSelector) {
+            if (!table) return;
+            const expectedActionIndex = expectedCount - 1;
+            table.querySelectorAll('tbody tr').forEach((tr) => {
+                let cells = getTds(tr);
+                const findActionIndex = () => cells.findIndex(td => td.querySelector(actionSelector));
+
+                let actionIndex = findActionIndex();
+                if (actionIndex === -1) {
+                    while (cells.length > expectedCount) {
+                        tr.removeChild(cells[cells.length - 1]);
+                        cells = getTds(tr);
+                    }
+                    while (cells.length < expectedCount) {
+                        tr.appendChild(document.createElement('td'));
+                        cells = getTds(tr);
+                    }
+                    return;
+                }
+
+                while (cells.length > expectedCount) {
+                    actionIndex = findActionIndex();
+                    if (actionIndex > expectedActionIndex) {
+                        tr.removeChild(cells[0]);
+                    } else {
+                        tr.removeChild(cells[cells.length - 1]);
+                    }
+                    cells = getTds(tr);
+                }
+                while (cells.length < expectedCount) {
+                    actionIndex = findActionIndex();
+                    if (actionIndex < expectedActionIndex) {
+                        tr.insertBefore(document.createElement('td'), cells[0]);
+                    } else {
+                        tr.appendChild(document.createElement('td'));
+                    }
+                    cells = getTds(tr);
+                }
+
+                if (cells.length === expectedCount) {
+                    actionIndex = findActionIndex();
+                    if (actionIndex !== expectedActionIndex && actionIndex !== -1) {
+                        const actionCell = cells[actionIndex];
+                        const nextOrder = cells.filter(td => td !== actionCell);
+                        nextOrder.splice(expectedActionIndex, 0, actionCell);
+                        nextOrder.forEach(td => tr.appendChild(td));
+                    }
+                }
+            });
+        }
+
+        const table = document.getElementById('categories-table');
+        if (table) {
+            const thCount = table.querySelectorAll('thead th').length;
+            // Delete button lives in the last column.
+            normalizeTableCells(table, thCount, 'button[onclick*="deleteCategory"]');
+        }
+    });
+</script>
+{% endblock %}
